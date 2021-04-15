@@ -3,14 +3,17 @@ const app = express();
 const jwt = require("jsonwebtoken");
 const port = 3333;
 const dotenv = require("dotenv");
-const auth = require('./src/middleware/auth')
-const util = require('util')
+const auth = require("./src/middleware/auth");
+const util = require("util");
 
 dotenv.config();
 
 app.use(express.json());
 
 var mysql = require("mysql");
+
+
+
 // var connection = mysql.createConnection({
 //   host: "sql6.freemysqlhosting.net",
 //   user: "sql6404970",
@@ -30,24 +33,38 @@ const config = {
   host: "sql6.freemysqlhosting.net",
   user: "sql6404970",
   password: process.env.password,
-  database: "sql6404970"
-}
+  database: "sql6404970",
+};
 
-
-function makeDb( config ) {
-  const connection = mysql.createConnection( config );
+function makeDb(config) {
+  const connection = mysql.createConnection(config);
   return {
-    query( sql, args ) {
-      return util.promisify( connection.query )
-        .call( connection, sql, args );
+    query(sql, args) {
+      return util.promisify(connection.query).call(connection, sql, args);
     },
     close() {
-      return util.promisify( connection.end ).call( connection );
-    }
+      return util.promisify(connection.end).call(connection);
+    },
   };
 }
 
-const db = makeDb( config );
+const db = makeDb(config);
+
+
+const selfTransfer = async (amount, type, id) => {
+  console.log('selftransfer')
+  let now = new Date()
+  now = now.toString()
+  let date = now.slice(0,24)
+    db.query(`insert into transaction (dateOfTransfer,amount,type,customerID) values ('${date}', ${amount}, '${type}', ${id})`, (err,rows)=> {
+      if(err){
+        res.status(402).send('transaction failed')
+      }else{
+        res.send(rows)
+      }
+    })
+}
+
 
 
 
@@ -84,53 +101,71 @@ app.post("/login", async (req, res) => {
   );
 });
 
-app.post('/createAccount', auth , async (req, res)=> {
-  try{
-    connection.query(`insert into account (account_type,customerID,balance) values ('${req.body.account_type}',${req.user.customerID}, ${req.body.balance} )`, (err,rows)=> {
-      if(err){
-        res.status(400).send(err)
-      }else{
-        res.send(rows)
+app.post("/createAccount", auth, async (req, res) => {
+  try {
+    connection.query(
+      `insert into account (account_type,customerID,balance) values ('${req.body.account_type}',${req.user.customerID}, ${req.body.balance} )`,
+      (err, rows) => {
+        if (err) {
+          res.status(400).send(err);
+        } else {
+          res.send(rows);
+        }
       }
-    })
-  }catch(e){
-    res.status(500).send()
+    );
+  } catch (e) {
+    res.status(500).send();
   }
-})
+});
 
-app.post('/address', auth, async(req,res)=>{
-  try{
-    connection.query(`insert into address (PIN, Locality, state, country, customerID) values (${req.body.PIN},'${req.body.Locality}', '${req.body.state}', '${req.body.country}', ${req.user.customerID})`, (err,rows)=> {
-      if(err){
-        console.log(err)
-      }else{
-        console.log(rows)
-        res.send(rows)
+app.post("/address", auth, async (req, res) => {
+  try {
+    connection.query(
+      `insert into address (PIN, Locality, state, country, customerID) values (${req.body.PIN},'${req.body.Locality}', '${req.body.state}', '${req.body.country}', ${req.user.customerID})`,
+      (err, rows) => {
+        if (err) {
+          console.log(err);
+        } else {
+          console.log(rows);
+          res.send(rows);
+        }
       }
-    })
-  }catch(e){
-    console.log(e)
+    );
+  } catch (e) {
+    console.log(e);
   }
-})
+});
 
-app.post('/updateBalance', auth, async(req,res)=>{
-  try{
-    let currBalance = await db.query(`select balance from account where customerID = ${req.user.customerID}`)
-    // console.log(currBalance[0].balance)
-    let updatedbalance = currBalance[0].balance + req.body.amount;
-    console.log(updatedbalance)
-    await db.query(`update account set balance = ${updatedbalance} where customerID = ${req.user.customerID}`, (err,rows)=> {
-      if(err){
-        console.log(err, 'update')
-      }else{
-        console.log(rows)
+app.post("/updateBalance", auth, async (req, res) => {
+  try {
+    let currBalance = await db.query(
+      `select balance from account where customerID = ${req.user.customerID}`
+    );
+    let updatedbalance;
+    if (req.body.type === "deposit") {
+      updatedbalance = currBalance[0].balance + req.body.amount;
+    } else {
+      updatedbalance = currBalance[0].balance - req.body.amount;
+      if (updatedbalance < 0) {
+        return res.status(400).send("You have insufficient amount!");
       }
-    })
+    }
 
-  }catch(e){
-    console.log(e)
+    console.log(updatedbalance);
+    await db.query(
+      `update account set balance = ${updatedbalance} where customerID = ${req.user.customerID}`,
+      (err, rows) => {
+        if (err) {
+          res.status(400).send('balance not updated!')
+        } else {
+          selfTransfer(req.body.amount, req.body.type, req.user.customerID)
+        }
+      }
+    );
+  } catch (e) {
+    console.log(e);
   }
-})
+});
 
 app.listen(port, () => {
   console.log("Server is up on port" + port);
