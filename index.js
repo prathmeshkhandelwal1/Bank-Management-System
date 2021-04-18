@@ -11,8 +11,7 @@ dotenv.config();
 app.use(express.json());
 
 var mysql = require("mysql");
-
-
+const { type } = require("os");
 
 // var connection = mysql.createConnection({
 //   host: "sql6.freemysqlhosting.net",
@@ -50,19 +49,31 @@ function makeDb(config) {
 
 const db = makeDb(config);
 
-
 const selfTransfer = async (amount, type, id) => {
-  console.log('selftransfer')
-  let now = new Date()
-  now = now.toString()
-  let date = now.slice(0,24)
-    db.query(`insert into transaction (dateOfTransfer,amount,type,customerID) values ('${date}', ${amount}, '${type}', ${id})`, (err,rows)=> {
-      if(err){
-        res.status(402).send('transaction failed')
-      }else{
-        res.send(rows)
+  console.log("selftransfer");
+  let now = new Date();
+  now = now.toString();
+  let date = now.slice(0, 24);
+  db.query(
+    `insert into transaction (dateOfTransfer,amount,type,customerID) values ('${date}', ${amount}, '${type}', ${id})`,
+    (err, rows) => {
+      if (err) {
+        throw new Error()
+      } else {
+        return 'done';
       }
-    })
+    }
+  );
+};
+
+const moneyTransfer = async(accountNo, type, amount) => {
+  const response = await db.query(`select * from account where account_number = ${accountNo}`)
+  const ID = response[0].customerID
+  let now = new Date();
+  now = now.toString();
+  let date = now.slice(0, 24);
+  const updateTransaction = await db.query(`insert into transaction (dateOfTransfer,amount,type,customerID) values ('${date}', ${amount}, '${type}', ${ID})`)
+  console.log(updateTransaction)
 }
 
 
@@ -156,15 +167,42 @@ app.post("/updateBalance", auth, async (req, res) => {
       `update account set balance = ${updatedbalance} where customerID = ${req.user.customerID}`,
       (err, rows) => {
         if (err) {
-          res.status(400).send('balance not updated!')
+          res.status(400).send("balance not updated!");
         } else {
-          selfTransfer(req.body.amount, req.body.type, req.user.customerID)
+          selfTransfer(req.body.amount, req.body.type, req.user.customerID);
         }
       }
     );
   } catch (e) {
     console.log(e);
   }
+});
+
+app.post("/moneyTransfer", auth, async (req, res) => {
+  try{
+    const { accountNo, amount } = req.body;
+    let senderBalance = await db.query(`select balance from account where customerID = ${req.user.customerID}`)
+    senderBalance = senderBalance[0].balance
+    let recieverbalance = await db.query(`select balance from account where account_number = ${accountNo}`)
+    recieverbalance = recieverbalance[0].balance
+    if(amount<= senderBalance){
+      let updatedbalance = senderBalance - amount;
+      const updatequery = await db.query(`update account set balance = ${updatedbalance} where customerID = ${req.user.customerID} `)
+      // console.log(updatequery)
+      let  temp = recieverbalance + amount
+      const recievequery = await db.query(`update account set balance = ${temp} where account_number = ${accountNo}`)
+      // console.log(recievequery)
+      selfTransfer(amount,"withdrawl", req.user.customerID)
+      moneyTransfer(accountNo, "credit",amount)
+
+      res.send('Transfer done!')
+    }else{
+      res.status(400).send('Insufficient balance')
+    }
+  }catch(e){
+    res.status(500).send()
+  }
+  
 });
 
 app.listen(port, () => {
