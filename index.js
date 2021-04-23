@@ -5,9 +5,11 @@ const port = 3333;
 const dotenv = require("dotenv");
 const auth = require("./src/middleware/auth");
 const util = require("util");
+const cors = require('cors')
 dotenv.config();
 
 app.use(express.json());
+app.use(cors())
 
 var mysql = require('mysql')
 const { type } = require("os");
