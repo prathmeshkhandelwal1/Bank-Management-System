@@ -5,12 +5,11 @@ const port = 3333;
 const dotenv = require("dotenv");
 const auth = require("./src/middleware/auth");
 const util = require("util");
-
 dotenv.config();
 
 app.use(express.json());
 
-var mysql = require("mysql");
+var mysql = require('mysql')
 const { type } = require("os");
 
 // var connection = mysql.createConnection({
@@ -28,11 +27,16 @@ const { type } = require("os");
 //   }
 // });
 
+
+
+
 const config = {
   host: "sql6.freemysqlhosting.net",
-  user: "sql6404970",
+  user: "sql6407693",
   password: process.env.password,
-  database: "sql6404970",
+  database: "sql6407693",
+  // port:3306,
+  // insecureAuth : true
 };
 
 function makeDb(config) {
@@ -54,16 +58,10 @@ const selfTransfer = async (amount, type, id) => {
   let now = new Date();
   now = now.toString();
   let date = now.slice(0, 24);
-  db.query(
-    `insert into transaction (dateOfTransfer,amount,type,customerID) values ('${date}', ${amount}, '${type}', ${id})`,
-    (err, rows) => {
-      if (err) {
-        throw new Error()
-      } else {
-        return 'done';
-      }
-    }
-  );
+  const query = await db.query(
+    `insert into transaction (dateOfTransfer,amount,type,customerID) values ('${date}', ${amount}, '${type}', ${id})`);
+  console.log(query)
+  return query;
 };
 
 const moneyTransfer = async(accountNo, type, amount) => {
@@ -76,45 +74,69 @@ const moneyTransfer = async(accountNo, type, amount) => {
   console.log(updateTransaction)
 }
 
+app.get('/me', auth, async(req,res)=> {
+  const query = await db.query(`select * from customer where customerID = ${req.user.customerID}`)
+  // console.log(query)
+  const query2 = await db.query(`select * from address where customerID = '${req.user.customerID}'`)
+  query[0].token = ""
+  query[0].password = ""
+  const obj = {
+    ...query[0],
+    ...query2[0]
+  }
+  res.send(obj)
+})
+
+app.get('/checkBalance', auth, async (req,res)=> {
+  const query = await db.query(`select balance from account where customerID = ${req.user.customerID}`)
+  res.send(query[0])
+})
+
+app.get('/transactions', auth, async(req,res)=> {
+  const query = await db.query(`select * from transaction where customerID = ${req.user.customerID}`)
+  console.log(query)
+  res.send(query)
+})
+
+app.get('/accountDetails', auth, async(req,res)=>{
+  const query = await db.query(`select * from account where customerID = '${req.user.customerID}'`)
+  console.log(query)
+  res.send(query)
+})
+
 
 
 
 app.post("/register", async (req, res) => {
-  const token = jwt.sign({ email: req.body.Email.toString() }, "thisissecret");
-  connection.query(
-    `INSERT INTO customer (Name,Email,DOB,password,token) values ('${req.body.Name}', '${req.body.Email}', '${req.body.DOB}', '${req.body.password}', '${token}')`,
-    (err, rows) => {
-      if (err) {
-        console.log(err);
-        return res.status(400).send("fuck");
-      }
-      res.send(rows);
-      console.log(rows.insertID);
-      const token = jwt.sign({ id: rows.insertID.toString() }, "thisissecret");
-    }
+  const token = jwt.sign({ email: req.body.Email.toString() }, process.env.secret);
+  const query = await db.query(
+    `INSERT INTO customer (Name,Email,DOB,password,token) values ('${req.body.Name}', '${req.body.Email}', '${req.body.DOB}', '${req.body.password}', '${token}')`
   );
+  // const query = await db.execute(`INSERT INTO customer (Name,Email,DOB,password,token) values ('${req.body.Name}', '${req.body.Email}', '${req.body.DOB}', '${req.body.password}', '${token}`)
+  console.log(query.insertId)
+  const obj = {
+    id: query.insertId,
+    token: token
+  }
+  res.send(obj)
 });
 
 app.post("/login", async (req, res) => {
   let user;
-  connection.query(
-    `select * from customer where email='${req.body.Email}'`,
-    (err, rows) => {
-      if (err) {
-        console.log(err);
-        return res.status(404).send();
-      }
-      console.log(rows[0].customerID);
-      user = { ...rows[0] };
-      user.password = "";
-      res.send(user);
-    }
-  );
+  console.log('hi')
+  const query = await db.query(`select * from customer where Email='${req.body.Email}'`)
+  user = query[0];
+  if(req.body.password === user.password){
+    user.password="";
+    return res.send(user)
+  }else{
+    return res.status(400).send('invalid credentials')
+  }
 });
 
 app.post("/createAccount", auth, async (req, res) => {
   try {
-    connection.query(
+    db.query(
       `insert into account (account_type,customerID,balance) values ('${req.body.account_type}',${req.user.customerID}, ${req.body.balance} )`,
       (err, rows) => {
         if (err) {
@@ -169,7 +191,8 @@ app.post("/updateBalance", auth, async (req, res) => {
         if (err) {
           res.status(400).send("balance not updated!");
         } else {
-          selfTransfer(req.body.amount, req.body.type, req.user.customerID);
+          selfTransfer(req.body.amount, req.body.type, req.user.customerID)
+          res.send('done')
         }
       }
     );
