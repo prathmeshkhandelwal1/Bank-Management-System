@@ -228,6 +228,6 @@ app.post("/moneyTransfer", auth, async (req, res) => {
   
 });
 
-app.listen(port, () => {
-  console.log("Server is up on port" + port);
+app.listen(process.env.PORT || 3333, () => {
+  console.log("Server starting on port 3333")
 });
