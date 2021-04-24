@@ -155,7 +155,7 @@ app.post("/createAccount", auth, async (req, res) => {
 
 app.post("/address", auth, async (req, res) => {
   try {
-    connection.query(
+    db.query(
       `insert into address (PIN, Locality, state, country, customerID) values (${req.body.PIN},'${req.body.Locality}', '${req.body.state}', '${req.body.country}', ${req.user.customerID})`,
       (err, rows) => {
         if (err) {
